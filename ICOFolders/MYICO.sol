@@ -72,7 +72,8 @@ interface ISRXICO {
         address indexed referrer,
         uint256 amount,
         uint256 volume,
-        SaleType saleType
+        SaleType saleType,
+        bool stakingDone
     );
     event PaymentOptionUpdated(
         address indexed token,
@@ -462,18 +463,25 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
             _saleType2IcoDetail[saleType_].status = Status.Live;
         }
     }
-
+    
+    // @dev If buy hit is not for instant transfer that is sale type 1 stake_ value dosn't matter it is set to false by default.
     function buy(
         SaleType saleType_,
         address token_,
         uint256 amount_,
         address referrer_,
-        address user_ 
+        address user_,
+        bool stake_
     ) public payable nonReentrant {
         if (!getPaymentOption(token_).enable) {
             revert UnsupportedPaymentOptions();
         }
         ICO memory saleDetail_ = saleType2IcoDetail(saleType_);
+        if (
+            saleDetail_.saleTokenOption == SaleTokenOption.InstantTokenReceive
+        ) {
+            stake_ = false;
+        }
         if (saleDetail_.startAt > block.timestamp) {
             revert SaleNotLive(saleDetail_.status);
         }
@@ -497,14 +505,16 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
                 token_,
                 amount_,
                 amountInUsd_,
-                referrer_
+                referrer_,
+                stake_
             )
             : _buyWithNativeCoin(
                 saleDetail_,
                 saleType_,
                 user_,
                 amountInUsd_,
-                referrer_
+                referrer_,
+                stake_
             );
     }
 
@@ -515,7 +525,8 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
         address token_,
         uint256 amount_,
         uint256 amountInUsd_,
-        address referrer_
+        address referrer_,
+        bool stake_
     ) private {
         if (amountInUsd_ < saleDetail_.minBuyInUsd) {
             revert MinBuyLimit(saleDetail_.minBuyInUsd, amountInUsd_);
@@ -559,9 +570,17 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
             saleDetail_,
             saleType_,
             account_,
-            tokenAmount_
+            tokenAmount_,
+            stake_
         );
-        emit BuyToken(account_, referrer_, amount_, tokenAmount_, saleType_);
+        emit BuyToken(
+            account_,
+            referrer_,
+            amount_,
+            tokenAmount_,
+            saleType_,
+            stake_
+        );
 
         if (referrer_ != address(0) && referrer_ != account_) {
             referralContract.addReferral(account_, referrer_);
@@ -574,7 +593,8 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
         SaleType saleType_,
         address account_,
         uint256 amountInUsd_,
-        address referrer_
+        address referrer_,
+        bool stake_
     ) private {
         if (amountInUsd_ < saleDetail_.minBuyInUsd) {
             revert MinBuyLimit(saleDetail_.minBuyInUsd, amountInUsd_);
@@ -616,9 +636,17 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
             saleDetail_,
             saleType_,
             account_,
-            tokenAmount_
+            tokenAmount_,
+            stake_
         );
-        emit BuyToken(account_, referrer_, msg.value, tokenAmount_, saleType_);
+        emit BuyToken(
+            account_,
+            referrer_,
+            msg.value,
+            tokenAmount_,
+            saleType_,
+            stake_
+        );
 
         if (referrer_ != address(0) && referrer_ != account_) {
             referralContract.addReferral(account_, referrer_);
@@ -636,20 +664,23 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
         ICO memory saleDetail_,
         SaleType saleType_,
         address account_,
-        uint256 tokenAmount_
+        uint256 tokenAmount_,
+        bool stake_
     ) private {
         if (
             saleDetail_.saleTokenOption == SaleTokenOption.InstantTokenReceive
         ) {
-            // Direct transfer
-            // saleToken.safeTransfer(account_, tokenAmount_);
-            bool success = saleToken.approve(
-                address(stakingContract),
-                tokenAmount_
-            );
-            require(success, "TOKEN_APPROVE_FAILED");
+            if (stake_) {
+                bool success = saleToken.approve(
+                    address(stakingContract),
+                    tokenAmount_
+                );
+                require(success, "TOKEN_APPROVE_FAILED");
 
-            stakingContract.stake(tokenAmount_, account_, address(this));
+                stakingContract.stake(tokenAmount_, account_, address(this));
+            } else {
+                saleToken.safeTransfer(account_, tokenAmount_);
+            }
         } else {
             // Store claimable for later (single fallback condition)
             _user2SaleType2ClaimableDetail[account_][saleType_]
