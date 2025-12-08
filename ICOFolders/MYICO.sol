@@ -478,7 +478,7 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
         }
         ICO memory saleDetail_ = saleType2IcoDetail(saleType_);
         if (
-            saleDetail_.saleTokenOption == SaleTokenOption.InstantTokenReceive
+            saleDetail_.saleTokenOption == SaleTokenOption.TokenReceiveAfterSaleEnd
         ) {
             stake_ = false;
         }
