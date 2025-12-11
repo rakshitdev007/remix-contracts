@@ -785,8 +785,13 @@ interface AggregatorV3Interface {
 }
 
 // File: ICOFolders/MYICO.sol
+
 interface IReferral {
+    error ReferralAlreadyExists();
+    error InvalidReferrer();
+    error UnauthorizedHandler(address handler);
     error InvalidAddress();
+    error InvalidRange(uint256 startIndex, uint256 endIndex);
     error AlreadyInitialize();
     error NotInitialize();
     error InsufficientRewardToken();
@@ -799,11 +804,21 @@ interface IReferral {
     );
 
     function addReferral(address account_, address referrer_) external;
-    function distributeRewards(
-        address account_,
-        uint256 tokenAmount_,
-        uint8 saleType_
-    ) external;
+    function distributeRewards(address account_, uint256 tokenAmount_) external;
+    function getReferrer(
+        address user_
+    ) external view returns (address referrer);
+    function getReferralsCount(
+        address referrer_
+    ) external view returns (uint256);
+    function getReferralRewards(
+        address referrer_
+    ) external view returns (uint256);
+    function getDirectReferrals(
+        address referrer_,
+        uint256 startIndex,
+        uint256 endIndex
+    ) external view returns (address[] memory users);
 }
 
 interface ISRXICO {
@@ -1228,8 +1243,7 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
         }
     }
 
-    // @dev If buy hit is not for instant transfer that is sale type 1 stake_ value dosn't matter
-    // it is set to false by default.Yet you could stake it at claim function at the end.
+    // @dev If buy hit is not for instant transfer that is sale type 1 stake_ value dosn't matter it is set to false by default.
     function buy(
         SaleType saleType_,
         address token_,
@@ -1350,12 +1364,7 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
 
         if (referrer_ != address(0) && referrer_ != account_) {
             referralContract.addReferral(account_, referrer_);
-            // pass sale type index asuint8
-            referralContract.distributeRewards(
-                account_,
-                tokenAmount_,
-                uint8(saleType_)
-            );
+            referralContract.distributeRewards(account_, tokenAmount_);
         }
     }
 
@@ -1421,12 +1430,7 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
 
         if (referrer_ != address(0) && referrer_ != account_) {
             referralContract.addReferral(account_, referrer_);
-            // pass sale type index as uint8
-            referralContract.distributeRewards(
-                account_,
-                tokenAmount_,
-                uint8(saleType_)
-            );
+            referralContract.distributeRewards(account_, tokenAmount_);
         }
     }
 
@@ -1464,56 +1468,35 @@ contract MYICO is ISRXICO, Ownable, ReentrancyGuard {
         }
     }
 
-    function claimSaleToken(
-        SaleType saleType_,
-        bool stake
-    ) public nonReentrant {
+    function claimSaleToken(SaleType saleType_) public nonReentrant {
         ICO memory saleDetail_ = saleType2IcoDetail(saleType_);
-
-        // Check if the sale has ended
+        /// Check if the sale has ended
         if (block.timestamp < saleDetail_.endAt) {
             revert SaleNotEnded();
         }
-
         address caller_ = _msgSender();
         Claimable memory claimable_ = user2SaleType2ClaimableDetail(
             caller_,
             saleType_
         );
         uint256 _remainingToken = claimable_.amount - claimable_.claimed;
-
         if (_remainingToken == 0) {
             revert("claimed");
         }
-
         if (
             saleDetail_.saleTokenOption ==
             SaleTokenOption.TokenReceiveAfterSaleEnd
         ) {
             _user2SaleType2ClaimableDetail[caller_][saleType_]
                 .claimed = claimable_.amount;
+            // saleToken.safeTransfer(caller_, claimable_.amount);
+            bool success = saleToken.approve(
+                address(stakingContract),
+                claimable_.amount
+            );
+            require(success, "TOKEN_APPROVE_FAILED");
 
-            if (stake) {
-                // Approve and stake only if stake == true
-                bool success = saleToken.approve(
-                    address(stakingContract),
-                    claimable_.amount
-                );
-                require(success, "TOKEN_APPROVE_FAILED");
-
-                stakingContract.stake(
-                    claimable_.amount,
-                    caller_,
-                    address(this)
-                );
-            } else {
-                // If not staking, just transfer the token to the user
-                bool transferSuccess = saleToken.transfer(
-                    caller_,
-                    claimable_.amount
-                );
-                require(transferSuccess, "TOKEN_TRANSFER_FAILED");
-            }
+            stakingContract.stake(claimable_.amount, caller_, address(this));
         } else {
             revert InvalidOptionForTokenReceive();
         }

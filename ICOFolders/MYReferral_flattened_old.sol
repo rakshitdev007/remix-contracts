@@ -1,7 +1,132 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.24;
+
+/**
+ * @dev Provides information about the current execution context, including the
+ * sender of the transaction and its data. While these are generally available
+ * via msg.sender and msg.data, they should not be accessed in such a direct
+ * manner, since when dealing with meta-transactions the account sending and
+ * paying for execution may not be the actual sender (as far as an application
+ * is concerned).
+ *
+ * This contract is only required for intermediate, library-like contracts.
+ */
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+
+    function _contextSuffixLength() internal view virtual returns (uint256) {
+        return 0;
+    }
+}
+
+// File: @openzeppelin/contracts/access/Ownable.sol
+
+
+// OpenZeppelin Contracts (last updated v5.0.0) (access/Ownable.sol)
+
+
+/**
+ * @dev Contract module which provides a basic access control mechanism, where
+ * there is an account (an owner) that can be granted exclusive access to
+ * specific functions.
+ *
+ * The initial owner is set to the address provided by the deployer. This can
+ * later be changed with {transferOwnership}.
+ *
+ * This module is used through inheritance. It will make available the modifier
+ * `onlyOwner`, which can be applied to your functions to restrict their use to
+ * the owner.
+ */
+abstract contract Ownable is Context {
+    address private _owner;
+
+    /**
+     * @dev The caller account is not authorized to perform an operation.
+     */
+    error OwnableUnauthorizedAccount(address account);
+
+    /**
+     * @dev The owner is not a valid owner account. (eg. `address(0)`)
+     */
+    error OwnableInvalidOwner(address owner);
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
+     * @dev Initializes the contract setting the address provided by the deployer as the initial owner.
+     */
+    constructor(address initialOwner) {
+        if (initialOwner == address(0)) {
+            revert OwnableInvalidOwner(address(0));
+        }
+        _transferOwnership(initialOwner);
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Throws if the sender is not the owner.
+     */
+    function _checkOwner() internal view virtual {
+        if (owner() != _msgSender()) {
+            revert OwnableUnauthorizedAccount(_msgSender());
+        }
+    }
+
+    /**
+     * @dev Leaves the contract without owner. It will not be possible to call
+     * `onlyOwner` functions. Can only be called by the current owner.
+     *
+     * NOTE: Renouncing ownership will leave the contract without an owner,
+     * thereby disabling any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        if (newOwner == address(0)) {
+            revert OwnableInvalidOwner(address(0));
+        }
+        _transferOwnership(newOwner);
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Internal function without access restriction.
+     */
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
 
 // File: @openzeppelin/contracts/security/ReentrancyGuard.sol
+
 
 // OpenZeppelin Contracts (last updated v4.9.0) (security/ReentrancyGuard.sol)
 
@@ -73,15 +198,16 @@ abstract contract ReentrancyGuard {
      * @dev Returns true if the reentrancy guard is currently set to "entered", which indicates there is a
      * `nonReentrant` function in the call stack.
      */
-    // function _reentrancyGuardEntered() internal view returns (bool) {
-    //     return _status == _ENTERED;
-    // }
+    function _reentrancyGuardEntered() internal view returns (bool) {
+        return _status == _ENTERED;
+    }
 }
 
 // File: @openzeppelin/contracts/token/ERC20/IERC20.sol
 
 
 // OpenZeppelin Contracts (last updated v5.4.0) (token/ERC20/IERC20.sol)
+
 
 /**
  * @dev Interface of the ERC-20 standard as defined in the ERC.
@@ -163,10 +289,12 @@ interface IERC20 {
 
 // OpenZeppelin Contracts (last updated v5.4.0) (interfaces/IERC20.sol)
 
+
 // File: @openzeppelin/contracts/utils/introspection/IERC165.sol
 
 
 // OpenZeppelin Contracts (last updated v5.4.0) (utils/introspection/IERC165.sol)
+
 
 /**
  * @dev Interface of the ERC-165 standard, as defined in the
@@ -194,10 +322,12 @@ interface IERC165 {
 
 // OpenZeppelin Contracts (last updated v5.4.0) (interfaces/IERC165.sol)
 
+
 // File: @openzeppelin/contracts/interfaces/IERC1363.sol
 
 
 // OpenZeppelin Contracts (last updated v5.4.0) (interfaces/IERC1363.sol)
+
 
 
 /**
@@ -427,7 +557,7 @@ library SafeERC20 {
      * code. This can be used to implement an {ERC721}-like safe transfer that rely on {ERC1363} checks when
      * targeting contracts.
      *
-     * NOTE: Wh_en the recipient address (`to`) has no code (i.e. is an EOA), this function behaves as {forceApprove}.
+     * NOTE: When the recipient address (`to`) has no code (i.e. is an EOA), this function behaves as {forceApprove}.
      * Opposedly, when the recipient address (`to`) has code, this function only attempts to call {ERC1363-approveAndCall}
      * once without retrying, and relies on the returned value to be true.
      *
@@ -490,192 +620,175 @@ library SafeERC20 {
     }
 }
 
-/// @title CoinPrediction
-/// @notice Users stake tokens and earn APR (specified in basis points).
-/// @author Rakshit Kumar Singh
-contract CoinPredictionStaking is ReentrancyGuard {
+// File: ICOFolders/MYReferral.sol
+
+
+interface IReferral {
+    error ReferralAlreadyExists();
+    error InvalidReferrer();
+    error UnauthorizedHandler(address handler);
+    error InvalidAddress();
+    error InvalidRange(uint256 startIndex, uint256 endIndex);
+    error AlreadyInitialize();
+    error NotInitialize();
+    error InsufficientRewardToken();
+
+    event ReferralAdded(address indexed user, address indexed referrer);
+    event ReferralReward(
+        address indexed user,
+        address indexed referrer,
+        uint256 reward
+    );
+
+    function addReferral(address account_, address referrer_) external;
+    function distributeRewards(address account_, uint256 tokenAmount_) external;
+    function getReferrer(
+        address user_
+    ) external view returns (address referrer);
+    function getReferralsCount(
+        address referrer_
+    ) external view returns (uint256);
+    function getReferralRewards(
+        address referrer_
+    ) external view returns (uint256);
+    function getDirectReferrals(
+        address referrer_,
+        uint256 startIndex,
+        uint256 endIndex
+    ) external view returns (address[] memory users);
+}
+
+contract MYReferral is IReferral, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    IERC20 public immutable token;
-    address public owner;
-    bool public unlocked = true;
+    mapping(address user => address referrer) private _user2Referrer; // upline
+    mapping(address referrer => address[]) private _referrals; // direct referrals or count
+    mapping(address referrer => uint256) private _referralRewards;
+    mapping(address handler => bool) private _isHandler;
 
-    uint256 public constant YEAR = 365 days;
-    uint256 public maxStakeDuration;
-    uint256 public minStakeDuration;
+    bool public isInitialized;
+    uint256 public totalReferralBonusReward;
+    uint256 public totalReferralBonusAllocation;
+    uint8 public rewardPercentage = 10;
 
-    // apr stored in basis points (e.g. 1000 = 10%)
-    uint256 public apr;
+    IERC20 public rewardToken;
 
-    // Track total currently staked to protect withdrawals
-    uint256 public totalStaked;
+    constructor() Ownable(_msgSender()) {}
 
-    struct Stake {
-        uint256 amount;
-        uint256 startTime;
-        uint256 claimedRewards;
-        bool active;
-        uint256 stakeApr; // @dev for a perticular stake apr remains constant changes will be applied on later stakes
-    }
-
-    mapping(address => Stake[]) public stakes;
-
-    event Staked(address indexed user, uint256 amount);
-    event RewardClaimed(address indexed user, uint256 amount);
-    event Unstaked(address indexed user, uint256 amount, uint256 rewards);
-    event OwnershipTransferred(
-        address indexed previousOwner,
-        address indexed newOwner
-    );
-    event LockToggled(bool unlocked);
-    event AprUpdated(uint256 newApr);
-    event MinDurationUpdated(uint256 minYears);
-    event MaxDurationUpdated(uint256 maxYears);
-    event WithdrawnUnused(address indexed owner, uint256 amount);
-
-    constructor(
-        IERC20 tokenAddress,
-        uint256 initialMinDurationYears,
-        uint256 initialMaxDurationYears,
-        uint256 initialApr
-    ) {
-        token = tokenAddress;
-        owner = msg.sender;
-        minStakeDuration = initialMinDurationYears * YEAR;
-        maxStakeDuration = initialMaxDurationYears * YEAR;
-        apr = initialApr * 100;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Not owner");
-        _;
-    }
-
-    /// @notice validate that index exists for a given user
-    modifier validateIndex(address user, uint256 index) {
-        require(index < stakes[user].length, "Invalid index");
-        _;
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "Invalid address");
-        address prev = owner;
-        owner = newOwner;
-        emit OwnershipTransferred(prev, newOwner);
-    }
-
-    function toggleLock() external onlyOwner {
-        unlocked = !unlocked;
-        emit LockToggled(unlocked);
-    }
-
-    function stake(uint256 amount) external nonReentrant {
-        require(unlocked, "Staking paused");
-        require(amount > 0, "Invalid amount");
-
-        token.safeTransferFrom(msg.sender, address(this), amount);
-
-        stakes[msg.sender].push(
-            Stake({
-                amount: amount,
-                startTime: block.timestamp,
-                claimedRewards: 0,
-                active: true,
-                stakeApr: apr
-            })
+    function initialize(
+        address rewardToken_,
+        uint256 totalReferralBonusAllocation_,
+        address initialHandler_ // might be ico
+    ) external onlyOwner {
+        if (isInitialized) {
+            revert AlreadyInitialize();
+        }
+        if (rewardToken_ == address(0) || initialHandler_ == address(0)) {
+            revert InvalidAddress();
+        }
+        isInitialized = true;
+        rewardToken = IERC20(rewardToken_);
+        _isHandler[initialHandler_] = true;
+        address _caller = _msgSender();
+        rewardToken.safeTransferFrom(
+            _caller,
+            address(this),
+            totalReferralBonusAllocation_
         );
-
-        totalStaked += amount;
-
-        emit Staked(msg.sender, amount);
+        totalReferralBonusAllocation = totalReferralBonusAllocation_;
     }
 
-    /// @notice Calculate pending rewards (based on completed full years)
-    function pendingRewards(
-        address user,
-        uint256 index
-    ) public view validateIndex(user, index) returns (uint256) {
-        Stake memory s = stakes[user][index];
-        if (!s.active) return 0;
-
-        uint256 elapsed = block.timestamp - s.startTime;
-        if (elapsed > maxStakeDuration) elapsed = maxStakeDuration;
-
-        // s.stakeApr is basis points; divide by 10000 to get fraction
-        uint256 totalReward = (s.amount * elapsed * s.stakeApr) /
-            (YEAR * 10000);
-
-        if (totalReward <= s.claimedRewards) return 0;
-        return totalReward - s.claimedRewards;
+    function _onlyHandler() private view {
+        address caller = _msgSender();
+        if (!_isHandler[caller]) {
+            revert UnauthorizedHandler(caller);
+        }
     }
 
-    function claimReward(
-        uint256 index
-    ) external nonReentrant validateIndex(msg.sender, index) {
-        require(unlocked, "Staking paused");
-        uint256 reward = pendingRewards(msg.sender, index);
-        require(reward > 0, "No rewards yet");
-
-        stakes[msg.sender][index].claimedRewards += reward;
-        token.safeTransfer(msg.sender, reward);
-
-        emit RewardClaimed(msg.sender, reward);
+    function updateHandler(
+        address handler_,
+        bool isEnable_
+    ) external onlyOwner {
+        _isHandler[handler_] = isEnable_;
     }
 
-    function unstake(
-        uint256 index
-    ) external nonReentrant validateIndex(msg.sender, index) {
-        require(unlocked, "Staking paused");
-        Stake memory s = stakes[msg.sender][index];
-        require(s.active, "Already unstaked");
-
-        uint256 elapsed = block.timestamp - s.startTime;
-        require(elapsed >= minStakeDuration, "Minimum time not passed yet");
-
-        uint256 reward = pendingRewards(msg.sender, index);
-        uint256 totalReturn = s.amount + reward;
-
-        // mark inactive and update totalStaked
-        stakes[msg.sender][index].active = false;
-        totalStaked -= s.amount;
-
-        token.safeTransfer(msg.sender, totalReturn);
-
-        emit Unstaked(msg.sender, s.amount, reward);
+    function addReferral(address user_, address referrer_) external {
+        if (!isInitialized) {
+            revert NotInitialize();
+        }
+        _onlyHandler();
+        if (_user2Referrer[user_] == address(0)) {
+            _user2Referrer[user_] = referrer_;
+            _referrals[referrer_].push(user_);
+            emit ReferralAdded(user_, referrer_);
+        }
     }
 
-    /// @notice Owner may withdraw only tokens in excess of currently staked amount
-    function withdrawUnusedTokens() external onlyOwner {
-        uint256 bal = token.balanceOf(address(this));
-        require(bal > totalStaked, "No excess tokens");
-        uint256 withdrawAmount = bal - totalStaked;
-        token.safeTransfer(msg.sender, withdrawAmount);
-        emit WithdrawnUnused(msg.sender, withdrawAmount);
+    function distributeRewards(
+        address account_,
+        uint256 tokenAmount_
+    ) external nonReentrant {
+        _onlyHandler();
+        address referrer_ = getReferrer(account_);
+        uint256 rewardToken_ = (tokenAmount_ * rewardPercentage) / 1e2;
+        if (rewardToken_ > totalReferralBonusAllocation) {
+            revert InsufficientRewardToken();
+        }
+        if (rewardToken_ != 0) {
+            _referralRewards[referrer_] += rewardToken_;
+            rewardToken.safeTransfer(referrer_, rewardToken_);
+            emit ReferralReward(account_, referrer_, rewardToken_);
+            totalReferralBonusAllocation -= rewardToken_;
+            totalReferralBonusReward += rewardToken_;
+        }
     }
 
-    function getUserStakesLength(address user) external view returns (uint256) {
-        return stakes[user].length;
+    function getReferrer(address user_) public view returns (address) {
+        return _user2Referrer[user_];
     }
 
-    function setMinDuration(uint256 newMinDurationYears) public onlyOwner {
-        minStakeDuration = newMinDurationYears * YEAR;
-        emit MinDurationUpdated(newMinDurationYears);
+    function getReferralsCount(
+        address referrer_
+    ) public view returns (uint256) {
+        return _referrals[referrer_].length;
     }
 
-    function setMaxDuration(uint256 newMaxDurationYears) public onlyOwner {
-        maxStakeDuration = newMaxDurationYears * YEAR;
-        emit MaxDurationUpdated(newMaxDurationYears);
+    function updateRewardPercentage(uint8 _rewardPercentage) external {
+        rewardPercentage = _rewardPercentage;
     }
 
-    // apr supplied in basis points (1000 = 10%)
-    function setApr(uint256 newAprBasisPoints) public onlyOwner {
-        apr = newAprBasisPoints;
-        emit AprUpdated(newAprBasisPoints);
+    function getDirectReferrals(
+        address referrer_,
+        uint256 startIndex_,
+        uint256 endIndex_
+    ) public view returns (address[] memory users) {
+        if (
+            startIndex_ > endIndex_ || endIndex_ > getReferralsCount(referrer_)
+        ) {
+            revert InvalidRange(startIndex_, endIndex_);
+        }
+        uint256 length = endIndex_ - startIndex_;
+        users = new address[](length);
+        uint256 currentIndex;
+        for (uint256 i = startIndex_; i < endIndex_; ) {
+            users[currentIndex] = _referrals[referrer_][i];
+            ++currentIndex;
+            unchecked {
+                ++i;
+            }
+        }
     }
 
-    function getUserStakes(
-        address user
-    ) external view returns (Stake[] memory) {
-        return stakes[user];
+    function getReferralRewards(
+        address referrer_
+    ) external view returns (uint256) {
+        return _referralRewards[referrer_];
+    }
+
+    function transferRewardToken(
+        address account_,
+        uint256 amount_
+    ) external onlyOwner {
+        rewardToken.safeTransfer(account_, amount_);
     }
 }
