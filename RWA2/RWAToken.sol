@@ -1,95 +1,134 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
+/**
+ * @dev External identity registry interface.
+ *      Used to enforce on-chain identity / KYC compliance.
+ */
 interface IIdentityRegistry {
     function hasIdentity(address user) external view returns (bool);
 }
 
-contract RWAToken is ERC20, Ownable(msg.sender) {
-    IIdentityRegistry public immutable identityRegistry;
-    uint256 public immutable assetId;
+/**
+ * @title RWAToken
+ * @author Rakshit Kumar Singh
+ *
+ * @notice
+ * ERC20 token representing ownership of a single real-world asset (RWA).
+ *
+ * @dev
+ * - One RWAToken instance maps to exactly one `assetId`
+ * - Deployed as an EIP-1167 minimal proxy clone
+ * - Fully initialized via `initialize()` (constructor is not used)
+ * - Initial supply is minted once during initialization
+ * - All token transfers are gated by on-chain identity checks
+ */
+contract RWAToken is Initializable, ERC20Upgradeable, OwnableUpgradeable {
+    /// @notice Legal asset identifier represented by this token
+    uint256 public assetId;
 
-    uint256 private constant BPS_DENOMINATOR = 10_000;
+    /// @notice Identity registry used for compliance checks
+    IIdentityRegistry public identityRegistry;
 
-    error IdentityRequired(address user);
-    error InvalidDistribution();
+    /*                       ERRORS                       */
+
+    /// @dev Thrown when a required address parameter is zero
     error ZeroAddress();
 
-    constructor(
-        string memory name_,
-        string memory symbol_,
-        address identityRegistry_,
-        uint256 assetId_,
-        address[] memory initialOwners,
-        uint256[] memory percentagesBps,
-        uint256 totalSupply_
-    ) ERC20(name_, symbol_) {
-        if (identityRegistry_ == address(0)) revert ZeroAddress();
-        if (initialOwners.length != percentagesBps.length) revert InvalidDistribution();
-        if (initialOwners.length == 0) revert InvalidDistribution();
+    /// @dev Thrown when initial owner configuration is invalid
+    error InvalidDistribution();
 
-        identityRegistry = IIdentityRegistry(identityRegistry_);
-        assetId = assetId_;
+    /// @dev Thrown when an address without identity attempts interaction
+    error IdentityRequired(address user);
 
-        uint256 totalMinted;
-        uint256 totalPercentage;
+    /*                     INIT PARAMS                    */
 
-        for (uint256 i = 0; i < initialOwners.length; i++) {
-            address owner = initialOwners[i];
-            uint256 bps = percentagesBps[i];
+    /**
+     * @notice Initialization parameters for RWAToken
+     *
+     * @dev
+     * Passed as a single struct to:
+     * - Reduce stack usage
+     * - Simplify clone initialization
+     * - Ensure deterministic ABI encoding
+     */
+    struct InitParams {
+        string name; // ERC20 name
+        string symbol; // ERC20 symbol
+        uint256 assetId; // Legal asset identifier
+        address identityRegistry; // IdentityRegistry contract
+        address[] initialOwners; // Initial token holders
+        uint256[] initialOwnersBalance; // Absolute token balances per owner
+        address propertyManager; // Token owner / Property manager
+    }
+
+    /*                     INITIALIZER                    */
+
+    /**
+     * @notice Initializes the RWA token and mints initial balances
+     *
+     * @dev
+     * - Callable only once (protected by `initializer`)
+     * - Intended to be called by RWAManager after clone deployment
+     * - All initial owners must be identity-verified
+     * - Token ownership is assigned to `property manager`
+     *
+     * @param params Packed initialization parameters
+     */
+    function initialize(InitParams calldata params) external initializer {
+        if (params.identityRegistry == address(0)) revert ZeroAddress();
+        if (params.propertyManager == address(0)) revert ZeroAddress();
+        if (params.initialOwners.length == 0) revert InvalidDistribution();
+        if (params.initialOwners.length != params.initialOwnersBalance.length)
+            revert InvalidDistribution();
+
+        // Initialize ERC20 metadata
+        __ERC20_init(params.name, params.symbol);
+
+        // Set token owner / property manager
+        __Ownable_init(params.propertyManager);
+
+        assetId = params.assetId;
+        identityRegistry = IIdentityRegistry(params.identityRegistry);
+
+        // Mint tokens to initial owners
+        for (uint256 i = 0; i < params.initialOwners.length; i++) {
+            address owner = params.initialOwners[i];
 
             if (owner == address(0)) revert ZeroAddress();
-            if (!identityRegistry.hasIdentity(owner)) {
+            if (!identityRegistry.hasIdentity(owner))
                 revert IdentityRequired(owner);
-            }
 
-            totalPercentage += bps;
-
-            uint256 amount = (totalSupply_ * bps) / BPS_DENOMINATOR;
-            totalMinted += amount;
-
-            _mint(owner, amount);
+            _mint(owner, params.initialOwnersBalance[i] * 10 ** decimals());
         }
-
-        // Ensure exactly 100% distribution
-        if (totalPercentage != BPS_DENOMINATOR) revert InvalidDistribution();
-
-        // Safety: ensure total supply matches
-        if (totalMinted != totalSupply_) revert InvalidDistribution();
     }
 
-    /**
-     * @notice Optional controlled burn (redemption / buyback)
-     */
-    function burn(address from, uint256 amount) external onlyOwner {
-        _burn(from, amount);
-    }
+    /*                     TRANSFER HOOK                    */
 
     /**
-     * @dev ERC-3643-style compliance enforcement
-     * OZ v5 requires overriding _update()
+     * @notice Identity-gated ERC20 transfer hook
+     *
+     * @dev
+     * Enforces that:
+     * - Sender must have a valid identity (unless minting)
+     * - Receiver must have a valid identity (unless burning)
+     *
+     * This guarantees regulatory compliance for all token movements.
      */
     function _update(
         address from,
         address to,
         uint256 value
     ) internal override {
-        // Skip identity check for mint
-        if (from != address(0)) {
-            if (!identityRegistry.hasIdentity(from)) {
-                revert IdentityRequired(from);
-            }
-        }
+        if (from != address(0) && !identityRegistry.hasIdentity(from))
+            revert IdentityRequired(from);
 
-        // Skip identity check for burn
-        if (to != address(0)) {
-            if (!identityRegistry.hasIdentity(to)) {
-                revert IdentityRequired(to);
-            }
-        }
+        if (to != address(0) && !identityRegistry.hasIdentity(to))
+            revert IdentityRequired(to);
 
         super._update(from, to, value);
     }
