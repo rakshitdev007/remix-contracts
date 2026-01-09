@@ -4,6 +4,7 @@ pragma solidity 0.8.20;
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 /**
  * @dev External identity registry interface.
@@ -27,7 +28,12 @@ interface IIdentityRegistry {
  * - Initial supply is minted once during initialization
  * - All token transfers are gated by on-chain identity checks
  */
-contract RWAToken is Initializable, ERC20Upgradeable, OwnableUpgradeable {
+contract RWAToken is
+    Initializable,
+    ERC20Upgradeable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     /// @notice Legal asset identifier represented by this token
     uint256 public assetId;
 
@@ -131,5 +137,47 @@ contract RWAToken is Initializable, ERC20Upgradeable, OwnableUpgradeable {
             revert IdentityRequired(to);
 
         super._update(from, to, value);
+    }
+
+    /**
+     * @notice Allows a token holder to sell their tokens back to the contract
+     *         in exchange for native chain currency (ETH / BNB / MATIC).
+     *
+     * @dev
+     * - Payout is calculated proportionally based on:
+     *   (contract ETH balance * token amount) / total token supply
+     * - Tokens are burned before ETH is transferred (checks-effects-interactions)
+     * - Uses `nonReentrant` to protect against reentrancy attacks
+     *
+     * Requirements:
+     * - `amount` must be greater than zero
+     * - Caller must have sufficient token balance
+     * - Contract must have non-zero token supply
+     * - Contract must have sufficient native token liquidity
+     *
+     * @param amount Number of tokens to sell (in smallest ERC20 units)
+     */
+    function sellout(uint256 amount) external nonReentrant {
+        address stakeHolder = msg.sender;
+
+        if (amount == 0) revert("Amount zero");
+        if (balanceOf(stakeHolder) < amount)
+            revert("Insufficient token balance");
+
+        uint256 supply = totalSupply();
+        uint256 ethBalance = address(this).balance;
+
+        require(supply > 0, "No supply");
+        require(ethBalance > 0, "No ETH liquidity");
+
+        uint256 payout = (ethBalance * amount) / supply;
+        require(payout > 0, "Payout too small");
+
+        // Burn first (effects)
+        _burn(stakeHolder, amount);
+
+        // Interactions last
+        (bool success, ) = stakeHolder.call{value: payout}("");
+        require(success, "ETH transfer failed");
     }
 }
