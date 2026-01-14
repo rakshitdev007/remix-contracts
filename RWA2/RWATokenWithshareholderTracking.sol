@@ -27,6 +27,7 @@ interface IIdentityRegistry {
  * - Fully initialized via `initialize()` (constructor is not used)
  * - Initial supply is minted once during initialization
  * - All token transfers are gated by on-chain identity checks
+ * - Shareholders are tracked automatically based on token balances
  */
 contract RWAToken is
     Initializable,
@@ -39,6 +40,17 @@ contract RWAToken is
 
     /// @notice Identity registry used for compliance checks
     IIdentityRegistry public identityRegistry;
+
+    /*                 SHAREHOLDER STORAGE                */
+
+    /// @dev List of all current shareholders (balance > 0)
+    address[] private _shareholders;
+
+    /// @dev Index of shareholder in `_shareholders` array
+    mapping(address => uint256) private _shareholderIndex;
+
+    /// @dev Internal guard to prevent duplicate entries
+    mapping(address => bool) private _isShareholder;
 
     /*                       ERRORS                       */
 
@@ -116,14 +128,16 @@ contract RWAToken is
     /*                     TRANSFER HOOK                    */
 
     /**
-     * @notice Identity-gated ERC20 transfer hook
+     * @notice Identity-gated ERC20 transfer hook with shareholder tracking
      *
      * @dev
      * Enforces that:
      * - Sender must have a valid identity (unless minting)
      * - Receiver must have a valid identity (unless burning)
      *
-     * This guarantees regulatory compliance for all token movements.
+     * Additionally:
+     * - Adds an address to shareholders when balance changes 0 → >0
+     * - Removes an address from shareholders when balance changes >0 → 0
      */
     function _update(
         address from,
@@ -136,7 +150,73 @@ contract RWAToken is
         if (to != address(0) && !identityRegistry.hasIdentity(to))
             revert IdentityRequired(to);
 
+        uint256 fromBalanceBefore = from == address(0)
+            ? 0
+            : balanceOf(from);
+
+        uint256 toBalanceBefore = to == address(0)
+            ? 0
+            : balanceOf(to);
+
         super._update(from, to, value);
+
+        // Remove shareholder if balance becomes zero
+        if (
+            from != address(0) &&
+            fromBalanceBefore > 0 &&
+            balanceOf(from) == 0
+        ) {
+            _removeShareholder(from);
+        }
+
+        // Add shareholder if balance becomes non-zero
+        if (
+            to != address(0) &&
+            toBalanceBefore == 0 &&
+            balanceOf(to) > 0
+        ) {
+            _addShareholder(to);
+        }
+    }
+
+    /*                SHAREHOLDER MANAGEMENT               */
+
+    /**
+     * @dev Adds an address to the shareholder list
+     */
+    function _addShareholder(address account) internal {
+        if (_isShareholder[account]) return;
+
+        _isShareholder[account] = true;
+        _shareholderIndex[account] = _shareholders.length;
+        _shareholders.push(account);
+    }
+
+    /**
+     * @dev Removes an address from the shareholder list
+     */
+    function _removeShareholder(address account) internal {
+        if (!_isShareholder[account]) return;
+
+        uint256 index = _shareholderIndex[account];
+        uint256 lastIndex = _shareholders.length - 1;
+
+        if (index != lastIndex) {
+            address last = _shareholders[lastIndex];
+            _shareholders[index] = last;
+            _shareholderIndex[last] = index;
+        }
+
+        _shareholders.pop();
+        delete _shareholderIndex[account];
+        delete _isShareholder[account];
+    }
+
+    /**
+     * @notice Returns the list of all current shareholders
+     */
+    function getShareholders() external view returns (address[] memory) {
+        return _shareholders;
     }
 
     /**
@@ -148,12 +228,6 @@ contract RWAToken is
      *   (contract ETH balance * token amount) / total token supply
      * - Tokens are burned before ETH is transferred (checks-effects-interactions)
      * - Uses `nonReentrant` to protect against reentrancy attacks
-     *
-     * Requirements:
-     * - `amount` must be greater than zero
-     * - Caller must have sufficient token balance
-     * - Contract must have non-zero token supply
-     * - Contract must have sufficient native token liquidity
      *
      * @param amount Number of tokens to sell (in smallest ERC20 units)
      */
@@ -180,6 +254,11 @@ contract RWAToken is
         (bool success, ) = stakeHolder.call{value: payout}("");
         require(success, "ETH transfer failed");
     }
+
+    /**
+     * @notice Accept native token deposits (rent, yield, revenue, etc.)
+     */
+    receive() external payable {}
 }
 
 
