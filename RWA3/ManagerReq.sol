@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -38,19 +38,19 @@ interface ILegalRegistry {
  * @dev Interface MUST exactly match IdentityRegistry ABI.
  */
 interface IIdentityRegistry {
-    enum kycLevel {
+    enum KYCLEVEL {
         none,
         basic,
         enhanced
     }
 
-    enum riskScoreBand {
+    enum RISKSCOREBAND {
         low,
         medium,
         high
     }
 
-    enum investorClass {
+    enum INVESTORCLASS {
         retail,
         professional,
         accredited
@@ -60,9 +60,9 @@ interface IIdentityRegistry {
         uint256 verifiedTill;
         string identityURI;
         string countryCode;
-        kycLevel level;
-        riskScoreBand risk;
-        investorClass class;
+        KYCLEVEL level;
+        RISKSCOREBAND risk;
+        INVESTORCLASS class;
     }
 
     function hasValidIdentity(address user) external view returns (bool);
@@ -91,7 +91,7 @@ interface IRWAToken {
 /*===============================MANAGER===============================*/
 
 /**
- * @title RWAManager
+ * @title RwaManager
  * @author Rakshit Kumar Singh
  * @dev Deploys and manages RWA ERC20 token instances (EIP-1167).
  *
@@ -99,14 +99,14 @@ interface IRWAToken {
  *      - Enforces jurisdiction + identity compliance
  *      - One token per approved asset
  */
-contract RWAManager is Ownable {
+contract RwaManager is Ownable {
     using Clones for address;
 
     /*===============================STORAGE===============================*/
 
     address public rwaImplementation;
-    ILegalRegistry public legalRegistry;
-    IIdentityRegistry public identityRegistry;
+    ILegalRegistry public immutable legalRegistry;
+    IIdentityRegistry public immutable identityRegistry;
 
     mapping(uint256 => address) public rwaByAsset;
     address[] private _allRWATokens;
@@ -151,7 +151,7 @@ contract RWAManager is Ownable {
     /**
      * @notice Creates and initializes an RWA token for an approved asset.
      */
-    function createRWA(
+    function createRwa(
         string memory name,
         string memory symbol,
         uint256 assetId,

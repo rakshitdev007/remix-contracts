@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
@@ -13,19 +13,19 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
  * @dev Interface MUST exactly match IdentityRegistry ABI.
  */
 interface IIdentityRegistry {
-    enum kycLevel {
+    enum KYCLEVEL {
         none,
         basic,
         enhanced
     }
 
-    enum riskScoreBand {
+    enum RISKSCOREBAND {
         low,
         medium,
         high
     }
 
-    enum investorClass {
+    enum INVESTORCLASS {
         retail,
         professional,
         accredited
@@ -35,9 +35,9 @@ interface IIdentityRegistry {
         uint256 verifiedTill;
         string identityURI;
         string countryCode;
-        kycLevel level;
-        riskScoreBand risk;
-        investorClass class;
+        KYCLEVEL level;
+        RISKSCOREBAND risk;
+        INVESTORCLASS class;
     }
 
     function hasValidIdentity(address user) external view returns (bool);
@@ -113,13 +113,13 @@ contract RWAToken is
         identityRegistry = IIdentityRegistry(params.identityRegistry);
 
         for (uint256 i = 0; i < len; i++) {
-            address owner = params.initialOwners[i];
-            if (owner == address(0)) revert ZeroAddress();
+            address initialOwner = params.initialOwners[i];
+            if (initialOwner == address(0)) revert ZeroAddress();
 
-            if (!identityRegistry.hasValidIdentity(owner))
-                revert IdentityRequired(owner);
+            if (!identityRegistry.hasValidIdentity(initialOwner))
+                revert IdentityRequired(initialOwner);
 
-            _mint(owner, params.initialOwnersBalance[i] * 10 ** decimals());
+            _mint(initialOwner, params.initialOwnersBalance[i] * 10 ** decimals());
         }
 
         transferOwnership(params.propertyManager);
