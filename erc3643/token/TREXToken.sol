@@ -68,7 +68,6 @@ contract TREXToken is IERC3643, ERC20, Ownable, Pausable {
     ) ERC20(name_, symbol_) Ownable(msg.sender) {
         if (identityRegistry_ == address(0)) revert InvalidAddress();
         if (compliance_ == address(0)) revert InvalidAddress();
-        
         identityRegistry = IIdentityRegistry(identityRegistry_);
         compliance = ICompliance(compliance_);
         onchainId = onchainId_;

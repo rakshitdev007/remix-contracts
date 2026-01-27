@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.20;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import {IIdentityRegistry} from "./interfaces/IIdentityRegistry.sol";
+
+/*===============================TOKEN===============================*/
+
+/**
+ * @title RwaToken
+ * @author Rakshit Kumar Singh
+ * @dev ERC20 token representing fractional ownership of a legally approved RWA.
+ *
+ *      - Transfers are identity-gated
+ *      - Cross-jurisdiction transfers are blocked
+ *      - Designed to integrate with LegalRegistry + IdentityRegistry
+ */
+contract RwaToken is
+    Initializable,
+    ERC20Upgradeable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
+    /*===============================STORAGE===============================*/
+
+    uint256 public assetId;
+    IIdentityRegistry public identityRegistry;
+    uint256 cap;
+    uint256 price;
+    uint256 rentAmount;
+
+    /*===============================ERRORS===============================*/
+
+    error ZeroAddress();
+    error InvalidDistribution();
+    error IdentityRequired(address user);
+    error CountryTransferBlocked(
+        address from,
+        address to,
+        string fromCountry,
+        string toCountry
+    );
+    error CapLimitVoilated(uint256 difference);
+
+    /*===============================INIT PARAMS===============================*/
+
+    struct InitParams {
+        string name;
+        string symbol;
+        uint256 assetId;
+        address identityRegistry;
+        uint256 cap;
+        uint256 price;
+        address propertyManager;
+    }
+
+    /*===============================INITIALIZER===============================*/
+
+    /**
+     * @notice Initializes the RWA token instance.
+     * @dev Called once by the factory or deployer.
+     */
+    function initialize(InitParams calldata params) external initializer {
+        if (params.identityRegistry == address(0)) revert ZeroAddress();
+        if (params.propertyManager == address(0)) revert ZeroAddress();
+
+        cap = params.cap;
+
+        __ERC20_init(params.name, params.symbol);
+        __Ownable_init(msg.sender);
+        __ReentrancyGuard_init();
+
+        assetId = params.assetId;
+        identityRegistry = IIdentityRegistry(params.identityRegistry);
+
+        transferOwnership(params.propertyManager);
+    }
+
+    /*===============================INTERNAL FUNCTIONS overrides===============================*/
+
+    /**
+     * @dev Country + identity gated ERC20 transfer hook.
+     *
+     * Rules:
+     * - Minting allowed only from owner
+     * - Burning allowed to zero address
+     * - Sender and receiver must both have valid identity
+     * - Sender and receiver must belong to the same country
+     */
+    function _update(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override {
+        if (from == address(0) && totalSupply() + amount > cap) {
+            revert CapLimitVoilated(totalSupply() + amount - cap);
+        }
+        // Minting
+        if (from == address(0)) {
+            super._update(from, to, amount);
+            return;
+        }
+        if (from == address(owner())) {
+            super._update(from, to, amount);
+            return;
+        }
+
+        // Burning
+        if (to == address(0)) {
+            super._update(from, to, amount);
+            return;
+        }
+        if (to == address(owner())) {
+            super._update(from, to, amount);
+            return;
+        }
+
+        // Identity enforcement
+        if (!identityRegistry.hasValidIdentity(from))
+            revert IdentityRequired(from);
+        if (!identityRegistry.hasValidIdentity(to)) revert IdentityRequired(to);
+
+        // Jurisdiction enforcement
+        IIdentityRegistry.Identity memory fromId = identityRegistry.getIdentity(
+            from
+        );
+        IIdentityRegistry.Identity memory toId = identityRegistry.getIdentity(
+            to
+        );
+
+        if (
+            keccak256(bytes(fromId.countryCode)) !=
+            keccak256(bytes(toId.countryCode))
+        ) {
+            revert CountryTransferBlocked(
+                from,
+                to,
+                fromId.countryCode,
+                toId.countryCode
+            );
+        }
+
+        super._update(from, to, amount);
+    }
+
+    /*===============================Invest===============================*/
+
+    function invest(address account, uint256 value) public {
+        uint256 cost = (value / (10 ** decimals())) * price;
+        (bool status, ) = owner().call{value: cost}("");
+        require(status, "ETH transfer failed");
+        _mint(account, value);
+    }
+
+    /*=============================== Rent System ===============================*/
+
+    function payRent() public{
+
+    }
+
+    /*===============================RECEIVE===============================*/
+
+    receive() external payable {}
+}
