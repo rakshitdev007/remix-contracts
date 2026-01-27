@@ -26,7 +26,7 @@
 
 pragma solidity 0.8.17;
 
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable@4.5.0/access/OwnableUpgradeable.sol";
 import "../../token/IToken.sol";
 import "./IModularCompliance.sol";
 import "./MCStorage.sol";
@@ -91,7 +91,7 @@ contract ModularCompliance is IModularCompliance, OwnableUpgradeable, MCStorage 
 
     /**
      *  @dev See {IModularCompliance-removeModule}.
-     */
+     */AgentRole
     function removeModule(address _module) external override onlyOwner {
         require(_module != address(0), "invalid argument - zero address");
         require(_moduleBound[_module], "module not bound");

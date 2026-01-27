@@ -26,7 +26,7 @@
 
 pragma solidity 0.8.17;
 
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable@4.5.0/access/OwnableUpgradeable.sol";
 import "../storage/CTRStorage.sol";
 import "../interface/IClaimTopicsRegistry.sol";
 
